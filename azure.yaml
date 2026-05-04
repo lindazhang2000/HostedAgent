@@ -1,20 +1,19 @@
-# azd project file - https://aka.ms/azd
-name: hosted-agent
-metadata:
-  template: hosted-agent@0.1.0
+# azd manifest for the Zava multi-hosted-agent sample.
+#
+# `azd up` runs:
+#   1. infra/main.bicep   -> Foundry account/project, ACR, gpt-4o deployment, RBAC
+#   2. postdeploy hook    -> docker build/push + register version for each agent
+#
+# We do not use azd's per-service `host: containerapp` deployment because each
+# agent here is a Foundry hosted agent (managed sandbox), not a Container App.
 
-services:
-  agent:
-    project: ./src
-    language: python
-    host: containerapp           # azd builds + pushes the image to ACR.
-    docker:
-      path: Dockerfile
-      context: .
+name: hosted-agents-zava
+metadata:
+  template: hosted-agents-zava@0.1.0
 
 hooks:
   postdeploy:
     shell: pwsh
     run: |
-      Write-Host "Registering hosted agent version with Foundry..."
-      python ./scripts/deploy_agent_version.py
+      Write-Host "Building images and registering hosted agent versions..."
+      python ./scripts/deploy_all.py

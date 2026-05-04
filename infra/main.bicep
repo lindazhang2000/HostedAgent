@@ -37,6 +37,23 @@ resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-10-01-pre
   properties: {}
 }
 
+@description('GPT-4o model deployment used by the hosted agent.')
+resource gpt4oDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-10-01-preview' = {
+  name: 'gpt-4o'
+  parent: aiFoundry
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 50
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4o'
+      version: '2024-11-20'
+    }
+  }
+}
+
 @description('Container Registry that stores the hosted agent image. Foundry pulls the image from here at deploy time.')
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: registryName
@@ -59,7 +76,7 @@ resource projectAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 @description('Grant the deploying user Azure AI User on the project so they can register agent versions.')
-resource userAIUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource userAIUserProject 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(aiProject.id, userPrincipalId, azureAIUserRoleId)
   scope: aiProject
   properties: {
@@ -69,8 +86,21 @@ resource userAIUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+@description('Grant the deploying user Azure AI User on the Foundry account.')
+resource userAIUserAccount 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiFoundry.id, userPrincipalId, azureAIUserRoleId)
+  scope: aiFoundry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAIUserRoleId)
+    principalId: userPrincipalId
+    principalType: 'User'
+  }
+}
+
 output AZURE_AI_FOUNDRY_NAME string = aiFoundry.name
 output AZURE_AI_PROJECT_NAME string = aiProject.name
-output AZURE_AI_PROJECT_ENDPOINT string = 'https://${aiFoundry.properties.endpoint}/api/projects/${aiProject.name}'
+output AZURE_AI_PROJECT_ENDPOINT string = '${aiFoundry.properties.endpoint}api/projects/${aiProject.name}'
+output AZURE_AI_FOUNDRY_ENDPOINT string = aiFoundry.properties.endpoint
+output AZURE_MODEL_DEPLOYMENT string = gpt4oDeployment.name
 output AZURE_CONTAINER_REGISTRY_NAME string = containerRegistry.name
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.loginServer

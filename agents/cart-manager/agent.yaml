@@ -1,0 +1,9 @@
+name: cart-manager
+description: Shopping cart operations and checkout assistance.
+container:
+  image: ${AZURE_CONTAINER_REGISTRY_ENDPOINT}/cart-manager:${AZURE_BUILD_TAG}
+  port: 8088
+  resources: { cpu: 0.5, memory: 1Gi }
+protocols: [responses]
+env:
+  - { name: MODEL_DEPLOYMENT, value: gpt-4o }

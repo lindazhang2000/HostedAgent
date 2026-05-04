@@ -1,0 +1,8 @@
+[
+  {"id": "PROD0001", "name": "Sherwin Calm Blue Paint, 1gal", "category": "paint", "price": 42.99},
+  {"id": "PROD0045", "name": "Pro Series Roller Brush Kit", "category": "paint", "price": 18.50},
+  {"id": "PROD0102", "name": "Mid-century Walnut Coffee Table", "category": "furniture", "price": 349.00},
+  {"id": "PROD0210", "name": "Velvet Emerald Accent Chair", "category": "furniture", "price": 599.00},
+  {"id": "PROD0345", "name": "Brass Pendant Light", "category": "lighting", "price": 129.00},
+  {"id": "PROD0410", "name": "Wool Berber Area Rug 8x10", "category": "rugs", "price": 489.00}
+]

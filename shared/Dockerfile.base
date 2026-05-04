@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.6
+# Shared base image for every Zava hosted agent.
+# Each agent's Dockerfile sets the AGENT_MODULE build arg.
+FROM mcr.microsoft.com/devcontainers/python:3.12-bookworm
+
+WORKDIR /app
+
+COPY shared/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Layout inside the image:
+#   /app/shared/...
+#   /app/data/...
+#   /app/main.py     (copied per-agent below)
+COPY shared /app/shared
+COPY data /app/data
+
+ENV PYTHONPATH=/app
+ENV PORT=8088
+EXPOSE 8088
+
+# Each per-agent Dockerfile overrides this with its own main.py via COPY.
+CMD ["python", "-m", "main"]

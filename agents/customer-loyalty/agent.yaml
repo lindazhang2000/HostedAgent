@@ -1,0 +1,9 @@
+name: customer-loyalty
+description: Loyalty discounts and promotions.
+container:
+  image: ${AZURE_CONTAINER_REGISTRY_ENDPOINT}/customer-loyalty:${AZURE_BUILD_TAG}
+  port: 8088
+  resources: { cpu: 0.5, memory: 1Gi }
+protocols: [responses]
+env:
+  - { name: MODEL_DEPLOYMENT, value: gpt-4o }
