@@ -1,0 +1,7 @@
+foundry-hosted-agents>=0.1.0
+openai>=1.54.0
+azure-identity>=1.19.0
+uvicorn[standard]>=0.30.0
+fastapi>=0.115.0
+opentelemetry-sdk>=1.27.0
+opentelemetry-exporter-otlp>=1.27.0

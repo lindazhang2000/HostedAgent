@@ -1,0 +1,20 @@
+# azd project file - https://aka.ms/azd
+name: hosted-agent
+metadata:
+  template: hosted-agent@0.1.0
+
+services:
+  agent:
+    project: ./src
+    language: python
+    host: containerapp           # azd builds + pushes the image to ACR.
+    docker:
+      path: Dockerfile
+      context: .
+
+hooks:
+  postdeploy:
+    shell: pwsh
+    run: |
+      Write-Host "Registering hosted agent version with Foundry..."
+      python ./scripts/deploy_agent_version.py
