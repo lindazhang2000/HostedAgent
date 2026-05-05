@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1.6
 FROM mcr.microsoft.com/devcontainers/python:3.12-bookworm
 WORKDIR /app
-COPY shared/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY shared/requirements-base.txt shared/requirements-af.txt ./
+RUN pip install --no-cache-dir -r requirements-base.txt
+RUN pip install --no-cache-dir --upgrade --force-reinstall -r requirements-af.txt
 COPY shared /app/shared
 COPY data /app/data
 COPY agents/customer-loyalty/main.py /app/main.py

@@ -1,0 +1,10 @@
+# Refreshed public preview protocol library (replaces azure-ai-agentserver-agentframework)
+azure-ai-agentserver-responses==1.0.0b5
+# core >=2.0.0b3 is pulled in transitively, but pin for reproducibility
+azure-ai-agentserver-core>=2.0.0b3
+azure-ai-projects>=2.1.0
+azure-identity>=1.19.0
+httpx>=0.27.0
+pydantic>=2.7.0
+PyYAML>=6.0
+azure-storage-blob>=12.20.0

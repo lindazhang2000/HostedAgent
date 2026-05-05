@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from shared.agent_host import build_agent, serve
 from shared.zava_tools import calculate_discount
 
@@ -15,18 +13,19 @@ customer's loyalty tier.
 - Call `calculate_discount` with the customer ID and report the result in
   first person, with celebratory emojis (🎉 😊 🛍️).
 
-Reply in JSON: {"answer": str, "discount_percentage": int}.
+Reply in clear, friendly natural language stating the discount percentage
+inline (do not return raw JSON to the user).
 """.strip()
 
 
-async def main() -> None:
+def main() -> None:
     agent = build_agent(
         name="customer-loyalty",
         instructions=INSTRUCTIONS,
         tools=[calculate_discount],
     )
-    await serve(agent)
+    serve(agent)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

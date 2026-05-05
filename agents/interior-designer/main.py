@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from shared.agent_host import build_agent, serve
 from shared.zava_tools import list_products
 
@@ -16,20 +14,20 @@ Tasks:
 - Ask follow-up questions about room style, color palette, and budget.
 - Recommend only products returned by the tool.
 
-Reply in JSON:
-{"answer": str, "image_output": [], "products": [{"id": str, "name": str,
-"type": str, "description": str, "price": str}]}
+Reply in clear, friendly natural language. When you mention products,
+include the product name and price inline in the sentence (do not return
+raw JSON to the user).
 """.strip()
 
 
-async def main() -> None:
+def main() -> None:
     agent = build_agent(
         name="interior-designer",
         instructions=INSTRUCTIONS,
         tools=[list_products],
     )
-    await serve(agent)
+    serve(agent)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

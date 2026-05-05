@@ -11,3 +11,11 @@ __pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Build / deploy artifacts
+*.zip
+script-out.txt
+*-out.txt
+route_body.json
+role.json
+body.json

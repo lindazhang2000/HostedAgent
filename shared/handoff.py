@@ -1,8 +1,7 @@
 """Sibling-agent handoff tool used by the Cora router agent.
 
-Cora calls this when it determines another specialist should handle the
-turn. Each specialist is a separate hosted agent reachable at:
-  {FOUNDRY_PROJECT_ENDPOINT}/agents/{name}/endpoint/protocols/openai/v1/responses
+Uses AIProjectClient.get_openai_client(agent_name=...) which routes
+to the specialist hosted agent's responses endpoint.
 """
 
 from __future__ import annotations
@@ -10,18 +9,28 @@ from __future__ import annotations
 import os
 from typing import Annotated, Any
 
-import httpx
+from agent_framework import tool
+from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from pydantic import Field
 
 _VALID = {"interior-designer", "inventory", "customer-loyalty", "cart-manager"}
 _credential = DefaultAzureCredential()
+_project: AIProjectClient | None = None
 
 
-def _project_endpoint() -> str:
-    return os.environ["FOUNDRY_PROJECT_ENDPOINT"].rstrip("/")
+def _get_project() -> AIProjectClient:
+    global _project
+    if _project is None:
+        _project = AIProjectClient(
+            endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+            credential=_credential,
+            allow_preview=True,
+        )
+    return _project
 
 
+@tool(approval_mode="never_require")
 async def handoff_to_specialist(
     specialist: Annotated[
         str,
@@ -33,17 +42,18 @@ async def handoff_to_specialist(
     if specialist not in _VALID:
         return {"error": f"unknown specialist '{specialist}'", "valid": sorted(_VALID)}
 
-    token = _credential.get_token("https://cognitiveservices.azure.com/.default").token
-    url = f"{_project_endpoint()}/agents/{specialist}/endpoint/protocols/openai/v1/responses"
-    payload = {
-        "input": [{"role": "user", "content": user_message}],
-        "stream": False,
-    }
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(
-            url,
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        r.raise_for_status()
-        return {"specialist": specialist, "reply": r.json()}
+    try:
+        client = _get_project().get_openai_client(agent_name=specialist)
+        resp = client.responses.create(input=user_message)
+        text_parts: list[str] = []
+        for item in (resp.output or []):
+            for c in getattr(item, "content", None) or []:
+                t = getattr(c, "text", None)
+                if t:
+                    text_parts.append(t)
+        return {
+            "specialist": specialist,
+            "reply_text": "\n".join(text_parts) or "(empty)",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"specialist": specialist, "error": f"{type(exc).__name__}: {exc}"[:500]}

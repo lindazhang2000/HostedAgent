@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from shared.agent_host import build_agent, serve
 from shared.zava_tools import add_to_cart, clear_cart, view_cart
 
@@ -19,18 +17,19 @@ Use:
 Always confirm the action and show the resulting cart contents. Suggest
 complementary products (paint -> brush, tape, drop cloth, etc.).
 
-Reply in JSON: {"answer": str, "cart": [...]}.
+Reply in clear, friendly natural language summarising the cart contents
+inline (do not return raw JSON to the user).
 """.strip()
 
 
-async def main() -> None:
+def main() -> None:
     agent = build_agent(
         name="cart-manager",
         instructions=INSTRUCTIONS,
         tools=[add_to_cart, view_cart, clear_cart],
     )
-    await serve(agent)
+    serve(agent)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

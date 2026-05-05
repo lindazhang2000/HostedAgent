@@ -1,19 +1,17 @@
 """Build, push, and register every Zava hosted agent.
 
-Usage (after `az login`, with the resource group + Foundry project + ACR
-already provisioned by infra/main.bicep):
-
+Usage:
   python scripts/deploy_all.py
 
-Reads env vars (set via `azd env set` or your shell):
-  AZURE_CONTAINER_REGISTRY_ENDPOINT  e.g. crh2aa4vjgovzru.azurecr.io
-  AZURE_AI_PROJECT_ENDPOINT          full /api/projects/{project} URL
-  AZURE_BUILD_TAG                    optional, defaults to git short sha or 'latest'
+Env vars:
+  AZURE_CONTAINER_REGISTRY_ENDPOINT  e.g. <registry>.azurecr.io
+  AZURE_AI_PROJECT_ENDPOINT          full https://...cognitiveservices.azure.com/api/projects/{name}
+  AZURE_BUILD_TAG                    optional (default: git short sha)
+  BUILD_MODE                         'acr' (default, server-side) or 'docker' (local)
 
-For each agent under agents/<name>/:
-  1. docker build -t {acr}/{name}:{tag}
-  2. docker push
-  3. AIProjectClient.agents.create_version(ContainerAgentDefinition(...))
+For each agents/<name>/:
+  1. build & push image (ACR build or local docker)
+  2. AIProjectClient.agents.create_version(definition=HostedAgentDefinition(...))
 """
 
 from __future__ import annotations
@@ -25,6 +23,14 @@ import sys
 from pathlib import Path
 
 import yaml
+from azure.ai.projects import AIProjectClient
+from azure.ai.projects.models import (
+    AgentProtocol,
+    ContainerConfiguration,
+    HostedAgentDefinition,
+    ProtocolVersionRecord,
+)
+from azure.identity import DefaultAzureCredential
 
 REPO = Path(__file__).resolve().parent.parent
 AGENTS_DIR = REPO / "agents"
@@ -32,7 +38,8 @@ AGENTS_DIR = REPO / "agents"
 
 def _run(*args: str, cwd: Path | None = None) -> None:
     print(">", " ".join(args))
-    subprocess.run(args, check=True, cwd=cwd)
+    # shell=True on Windows so az.cmd / docker.exe resolve via PATH.
+    subprocess.run(args, check=True, cwd=cwd, shell=(os.name == "nt"))
 
 
 def _short_sha() -> str:
@@ -50,58 +57,83 @@ def _expand(value: str) -> str:
     return string.Template(value).safe_substitute(os.environ)
 
 
+def _image_exists(registry: str, name: str, tag: str) -> bool:
+    try:
+        out = subprocess.run(
+            ["az", "acr", "repository", "show-tags",
+             "--name", registry, "--repository", name,
+             "--query", f"contains(@, '{tag}')", "-o", "tsv"],
+            capture_output=True, text=True, check=True, shell=(os.name == "nt"),
+        )
+        return out.stdout.strip().lower() == "true"
+    except Exception:
+        return False
+
+
 def build_and_push(name: str, tag: str, acr: str) -> str:
+    """Build & push the image. ACR build (default) or local Docker."""
     image = f"{acr}/{name}:{tag}"
-    # Build context = repo root so Dockerfile can COPY shared/ + agents/<name>/.
-    _run("docker", "build", "-f", f"agents/{name}/Dockerfile", "-t", image, ".", cwd=REPO)
-    _run("docker", "push", image)
+    registry = acr.split(".")[0]
+    mode = os.environ.get("BUILD_MODE", "acr").lower()
+    if mode == "acr":
+        if _image_exists(registry, name, tag):
+            print(f"  image {name}:{tag} already in ACR — skipping build")
+            return image
+        rg = os.environ.get("AZURE_RESOURCE_GROUP", "hostedagents")
+        _run(
+            "az", "acr", "build",
+            "--resource-group", rg,
+            "--registry", registry,
+            "--image", f"{name}:{tag}",
+            "--file", f"agents/{name}/Dockerfile",
+            ".",
+            cwd=REPO,
+        )
+    else:
+        _run("docker", "build", "-f", f"agents/{name}/Dockerfile", "-t", image, ".", cwd=REPO)
+        _run("docker", "push", image)
     return image
 
 
-def register_version(name: str, manifest: dict, project_endpoint: str) -> None:
-    # Imported lazily so the build step doesn't require the SDK.
-    from azure.ai.projects import AIProjectClient
-    from azure.ai.projects.models import (
-        ContainerAgentDefinition,
-        ContainerProtocolVersion,
-        ContainerResources,
-    )
-    from azure.identity import DefaultAzureCredential
-
+def register_version(
+    client: AIProjectClient,
+    name: str,
+    manifest: dict,
+    image: str,
+) -> None:
     container = manifest["container"]
-    env_vars = [
-        {"name": e["name"], "value": _expand(str(e.get("value", "")))}
+    cpu = str(container.get("resources", {}).get("cpu", "0.5"))
+    memory = str(container.get("resources", {}).get("memory", "1Gi"))
+
+    env_vars = {
+        e["name"]: _expand(str(e.get("value", "")))
         for e in (manifest.get("env") or [])
-    ]
+    }
+
+    proto_map = {
+        "responses": AgentProtocol.RESPONSES,
+        "invocations": AgentProtocol.INVOCATIONS,
+        "activity_protocol": AgentProtocol.ACTIVITY_PROTOCOL,
+    }
     protocols = [
-        ContainerProtocolVersion(name=p)
+        ProtocolVersionRecord(protocol=proto_map[p], version="1.0.0")
         for p in manifest.get("protocols", ["responses"])
     ]
 
-    client = AIProjectClient(
-        endpoint=project_endpoint,
-        credential=DefaultAzureCredential(),
+    definition = HostedAgentDefinition(
+        image=image,
+        container_protocol_versions=protocols,
+        cpu=cpu,
+        memory=memory,
+        environment_variables=env_vars,
     )
-    with client:
-        agent = client.agents.create_version(
-            agent_name=name,
-            description=manifest.get("description", ""),
-            definition=ContainerAgentDefinition(
-                image=_expand(container["image"]),
-                port=int(container.get("port", 8088)),
-                resources=ContainerResources(
-                    cpu=float(container.get("resources", {}).get("cpu", 0.5)),
-                    memory=container.get("resources", {}).get("memory", "1Gi"),
-                ),
-                container_protocol_versions=protocols,
-                environment_variables=env_vars,
-            ),
-        )
-        print(f"  registered {name}@{agent.version} (id={agent.id})")
-        print(
-            f"  endpoint: {project_endpoint}/agents/{name}"
-            "/endpoint/protocols/openai/v1/responses"
-        )
+
+    agent = client.agents.create_version(
+        agent_name=name,
+        description=manifest.get("description", ""),
+        definition=definition,
+    )
+    print(f"  registered {name}@{getattr(agent, 'version', '?')} (id={getattr(agent, 'id', '?')})")
 
 
 def main() -> int:
@@ -118,13 +150,25 @@ def main() -> int:
     os.environ["AZURE_BUILD_TAG"] = tag
     print(f"Using tag: {tag}\n")
 
-    for agent_dir in sorted(p for p in AGENTS_DIR.iterdir() if p.is_dir()):
-        name = agent_dir.name
-        print(f"=== {name} ===")
-        manifest = yaml.safe_load((agent_dir / "agent.yaml").read_text(encoding="utf-8"))
-        build_and_push(name, tag, acr)
-        register_version(name, manifest, project_endpoint)
-        print()
+    client = AIProjectClient(
+        endpoint=project_endpoint,
+        credential=DefaultAzureCredential(),
+        allow_preview=True,
+    )
+
+    with client:
+        only = {n.strip() for n in os.environ.get("AGENT_FILTER", "").split(",") if n.strip()}
+        for agent_dir in sorted(p for p in AGENTS_DIR.iterdir() if p.is_dir()):
+            name = agent_dir.name
+            if only and name not in only:
+                continue
+            print(f"=== {name} ===")
+            manifest = yaml.safe_load(
+                (agent_dir / "agent.yaml").read_text(encoding="utf-8")
+            )
+            image = build_and_push(name, tag, acr)
+            register_version(client, name, manifest, image)
+            print()
     return 0
 
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from shared.agent_host import build_agent, serve
 from shared.zava_tools import inventory_check
 
@@ -12,19 +10,19 @@ You are the Zava Inventory specialist. When a user asks about stock for one
 or more products, call `inventory_check` with the matching product IDs and
 report stock levels and warehouse locations.
 
-Reply in JSON: {"answer": str, "items": [{"id": str, "name": str,
-"in_stock": int, "location": str}]}.
+Reply in clear, friendly natural language listing each item with its stock
+count and warehouse location (do not return raw JSON to the user).
 """.strip()
 
 
-async def main() -> None:
+def main() -> None:
     agent = build_agent(
         name="inventory",
         instructions=INSTRUCTIONS,
         tools=[inventory_check],
     )
-    await serve(agent)
+    serve(agent)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

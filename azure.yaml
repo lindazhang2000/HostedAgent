@@ -1,8 +1,12 @@
 # azd manifest for the Zava multi-hosted-agent sample.
 #
 # `azd up` runs:
-#   1. infra/main.bicep   -> Foundry account/project, ACR, gpt-4o deployment, RBAC
-#   2. postdeploy hook    -> docker build/push + register version for each agent
+#   1. infra/main.bicep      -> Foundry account/project, ACR, gpt-4o deployment,
+#                               Storage account (cart state), RBAC
+#   2. postdeploy hook       -> build images + register one hosted-agent version
+#                               per agent, then grant the cart-manager identity
+#                               Storage Blob Data Contributor on the storage
+#                               account so it can read/write cart state.
 #
 # We do not use azd's per-service `host: containerapp` deployment because each
 # agent here is a Foundry hosted agent (managed sandbox), not a Container App.
@@ -11,9 +15,47 @@ name: hosted-agents-zava
 metadata:
   template: hosted-agents-zava@0.1.0
 
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
 hooks:
   postdeploy:
     shell: pwsh
     run: |
-      Write-Host "Building images and registering hosted agent versions..."
-      python ./scripts/deploy_all.py
+      $ErrorActionPreference = 'Stop'
+      $py = if (Test-Path ./.venv/Scripts/python.exe) { './.venv/Scripts/python.exe' } else { 'python' }
+
+      Write-Host "==> Building images and registering hosted-agent versions..."
+      & $py ./scripts/deploy_all.py
+      if ($LASTEXITCODE -ne 0) { throw "deploy_all.py failed" }
+
+      Write-Host "==> Granting cart-manager identity Storage Blob Data Contributor..."
+      $cartPid = az rest --method GET `
+        --url "$env:AZURE_AI_PROJECT_ENDPOINT/agents/cart-manager?api-version=2025-11-15-preview" `
+        --resource https://ai.azure.com `
+        --query "instance_identity.principal_id" -o tsv
+      if (-not $cartPid) { throw "Could not resolve cart-manager principal_id" }
+
+      $sub  = az account show --query id -o tsv
+      $rg   = $env:AZURE_RESOURCE_GROUP_NAME
+      if (-not $rg) { $rg = $env:AZURE_RESOURCE_GROUP }
+      $acct = $env:AZURE_STORAGE_ACCOUNT_NAME
+      $scope = "/subscriptions/$sub/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$acct"
+
+      $existing = az role assignment list `
+        --assignee $cartPid `
+        --role "Storage Blob Data Contributor" `
+        --scope $scope `
+        --query "[].id" -o tsv
+      if ([string]::IsNullOrWhiteSpace($existing)) {
+        az role assignment create `
+          --assignee-object-id $cartPid `
+          --assignee-principal-type ServicePrincipal `
+          --role "Storage Blob Data Contributor" `
+          --scope $scope | Out-Null
+        Write-Host "    granted (principal=$cartPid)"
+      } else {
+        Write-Host "    already granted"
+      }

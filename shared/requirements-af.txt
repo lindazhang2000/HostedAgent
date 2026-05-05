@@ -1,0 +1,6 @@
+agent-framework-core==1.2.2
+agent-framework-foundry==1.2.2
+agent-framework-openai==1.2.2
+agent-framework-orchestrations==1.0.0b260429
+# Refreshed preview: bridge between Agent Framework and the protocol library
+agent-framework-foundry-hosting==1.0.0a260429

@@ -1,8 +1,11 @@
 """Shared agent factory used by every hosted-agent container.
 
-Each `agents/<name>/main.py` imports `build_app` and passes its name,
-instructions, and tool list. `from_agent_framework` exposes the agent over
-the Responses protocol so the Foundry runtime can route traffic to it.
+Each `agents/<name>/main.py` imports `build_agent`/`serve` and passes its name,
+instructions, and tool list. `ResponsesHostServer` exposes the agent over the
+Responses protocol so the Foundry runtime can route traffic to it.
+
+Updated for the refreshed Foundry hosted-agent public preview:
+  https://learn.microsoft.com/azure/foundry/agents/how-to/migrate-hosted-agent-preview
 """
 
 from __future__ import annotations
@@ -12,8 +15,8 @@ from typing import Callable, Iterable
 
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from agent_framework_foundry_hosting import ResponsesHostServer
 from azure.identity import DefaultAzureCredential
-from azure.ai.agentserver.agentframework import from_agent_framework
 
 
 def _client() -> FoundryChatClient:
@@ -29,14 +32,17 @@ def build_agent(
     instructions: str,
     tools: Iterable[Callable] | None = None,
 ) -> Agent:
+    # `store=False` because conversation history is managed by the hosting platform
+    # in the refreshed preview.
     return Agent(
         client=_client(),
         name=name,
         instructions=instructions,
         tools=list(tools or []),
+        default_options={"store": False},
     )
 
 
-async def serve(agent: Agent) -> None:
+def serve(agent: Agent) -> None:
     """Start the Responses-protocol HTTP server."""
-    await from_agent_framework(agent).run_async()
+    ResponsesHostServer(agent).run()
