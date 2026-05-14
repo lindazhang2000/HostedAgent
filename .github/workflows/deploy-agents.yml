@@ -46,5 +46,5 @@ jobs:
           pip install pyyaml azure-identity "azure-ai-projects" --pre
 
       - name: Build, push, and register hosted agents
-        shell: pwsh
+        shell: powershell
         run: python scripts/deploy_all.py
