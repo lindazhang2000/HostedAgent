@@ -29,6 +29,8 @@ jobs:
       AZURE_RESOURCE_GROUP:              ${{ vars.AZURE_RESOURCE_GROUP }}
       AGENT_FILTER:                      ${{ github.event.inputs.agent_filter }}
       BUILD_MODE: acr
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
       
@@ -47,4 +49,7 @@ jobs:
 
       - name: Build, push, and register hosted agents
         shell: powershell
-        run: python scripts/deploy_all.py
+        run: |
+          chcp 65001 | Out-Null
+          $env:PYTHONIOENCODING = 'utf-8'
+          python scripts/deploy_all.py
