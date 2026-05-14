@@ -1,0 +1,55 @@
+name: Deploy hosted agents to private Foundry
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent_filter:
+        description: 'Comma-separated agent names (blank = all)'
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths:
+      - 'agents/**'
+      - 'shared/**'
+      - 'data/**'
+      - 'scripts/deploy_all.py'
+      - '.github/workflows/deploy-agents.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Windows, foundry-private]
+    env:
+      AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}
+      AZURE_AI_PROJECT_ENDPOINT:         ${{ vars.AZURE_AI_PROJECT_ENDPOINT }}
+      AZURE_RESOURCE_GROUP:              ${{ vars.AZURE_RESOURCE_GROUP }}
+      AGENT_FILTER:                      ${{ github.event.inputs.agent_filter }}
+      BUILD_MODE: acr
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Python deps
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml azure-identity "azure-ai-projects" --pre
+
+      - name: Build, push, and register hosted agents
+        shell: pwsh
+        run: python scripts/deploy_all.py
