@@ -87,6 +87,7 @@ def build_and_push(name: str, tag: str, acr: str) -> str:
             "--image", f"{name}:{tag}",
             "--source-acr-auth-id", "[caller]",
             "--file", f"agents/{name}/Dockerfile",
+            "--no-logs",
             ".",
             cwd=REPO,
         )
