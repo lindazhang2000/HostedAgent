@@ -80,11 +80,12 @@ def build_and_push(name: str, tag: str, acr: str) -> str:
             print(f"  image {name}:{tag} already in ACR — skipping build")
             return image
         rg = os.environ.get("AZURE_RESOURCE_GROUP", "hostedagents")
-        _run(
+                      _run(
             "az", "acr", "build",
             "--resource-group", rg,
             "--registry", registry,
             "--image", f"{name}:{tag}",
+            "--source-acr-auth-id", "[caller]",
             "--file", f"agents/{name}/Dockerfile",
             ".",
             cwd=REPO,
